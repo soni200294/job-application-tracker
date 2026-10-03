@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Application Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f1f5f9; margin: 0; padding: 24px 14px; color: #0f172a; }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    h1 { text-align: center; margin-top: 0; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .stat { background: #fff; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+    .stat b { display: block; font-size: 1.7rem; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.08); margin-bottom: 16px; }
+    .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    input, select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 1rem; min-width: 0; }
+    button { padding: 10px 14px; border: none; border-radius: 6px; background: #2563eb; color: #fff; font-weight: bold; cursor: pointer; }
+    .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .tools input { flex: 1; }
+    .gray { background: #475569; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e2e8f0; }
+    .del { background: #dc2626; padding: 6px 10px; }
+    .empty { text-align: center; color: #64748b; padding: 18px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Job Application Tracker</h1>
+    <div class="stats" id="stats"></div>
+
+    <div class="card">
+      <div class="form">
+        <input id="company" type="text" placeholder="Company name">
+        <input id="role" type="text" placeholder="Job role">
+        <select id="status">
+          <option>Applied</option><option>Interview</option><option>Offer</option><option>Rejected</option>
+        </select>
+        <button onclick="addApp()">Add Application</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tools">
+        <input id="search" type="text" placeholder="Search company or role">
+        <select id="filter">
+          <option>All</option><option>Applied</option><option>Interview</option><option>Offer</option><option>Rejected</option>
+        </select>
+        <button class="gray" onclick="exportCSV()">Export CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Company</th><th>Role</th><th>Date</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STATUSES = ["Applied", "Interview", "Offer", "Rejected"];
+    let apps = JSON.parse(localStorage.getItem("apps")) || [];
+    let search = "";
+    let filter = "All";
+
+    function addApp() {
+      const company = document.getElementById("company").value.trim();
+      const role = document.getElementById("role").value.trim();
+      const status = document.getElementById("status").value;
+      if (!company || !role) {
+        alert("Please enter company and role");
+        return;
+      }
+      apps.unshift({ id: Date.now(), company, role, status, date: new Date().toLocaleDateString() });
+      document.getElementById("company").value = "";
+      document.getElementById("role").value = "";
+      save();
+    }
+
+    function updateStatus(id, status) {
+      apps = apps.map(a => a.id === id ? { ...a, status } : a);
+      save();
+    }
+
+    function removeApp(id) {
+      apps = apps.filter(a => a.id !== id);
+      save();
+    }
+
+    function save() {
+      localStorage.setItem("apps", JSON.stringify(apps));
+      render();
+    }
+
+    function makeCell(text) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      return td;
+    }
+
+    function render() {
+      const stats = document.getElementById("stats");
+      stats.innerHTML = "";
+      const items = [["Total", apps.length]].concat(
+        STATUSES.map(s => [s, apps.filter(a => a.status === s).length])
+      );
+      items.forEach(([label, count]) => {
+        const box = document.createElement("div");
+        box.className = "stat";
+        const num = document.createElement("b");
+        num.textContent = count;
+        box.appendChild(num);
+        box.appendChild(document.createTextNode(label));
+        stats.appendChild(box);
+      });
+
+      const body = document.getElementById("rows");
+      body.innerHTML = "";
+      const shown = apps.filter(a =>
+        (filter === "All" || a.status === filter) &&
+        (a.company + " " + a.role).toLowerCase().includes(search)
+      );
+
+      if (shown.length === 0) {
+        const tr = document.createElement("tr");
+        const td = makeCell("No applications to show");
+        td.colSpan = 5;
+        td.className = "empty";
+        tr.appendChild(td);
+        body.appendChild(tr);
+        return;
+      }
+
+      shown.forEach(a => {
+        const tr = document.createElement("tr");
+        tr.appendChild(makeCell(a.company));
+        tr.appendChild(makeCell(a.role));
+        tr.appendChild(makeCell(a.date));
+
+        const statusCell = document.createElement("td");
+        const sel = document.createElement("select");
+        STATUSES.forEach(s => {
+          const opt = document.createElement("option");
+          opt.textContent = s;
+          if (s === a.status) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        sel.onchange = () => updateStatus(a.id, sel.value);
+        statusCell.appendChild(sel);
+        tr.appendChild(statusCell);
+
+        const actionCell = document.createElement("td");
+        const del = document.createElement("button");
+        del.className = "del";
+        del.textContent = "Delete";
+        del.onclick = () => removeApp(a.id);
+        actionCell.appendChild(del);
+        tr.appendChild(actionCell);
+
+        body.appendChild(tr);
+      });
+    }
+
+    function exportCSV() {
+      const rows = [["Company", "Role", "Date", "Status"]].concat(
+        apps.map(a => [a.company, a.role, a.date, a.status])
+      );
+      const csv = rows
+        .map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(","))
+        .join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "applications.csv";
+      link.click();
+    }
+
+    document.getElementById("search").addEventListener("input", e => {
+      search = e.target.value.toLowerCase();
+      render();
+    });
+    document.getElementById("filter").addEventListener("change", e => {
+      filter = e.target.value;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
